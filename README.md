@@ -1,7 +1,7 @@
 # Mini NPU Simulator
 
 이 프로젝트는 사람이 직관적으로 구별하는 `십자가(Cross)`와 `X` 패턴을 컴퓨터가 어떻게 숫자 연산으로 판별하는지 직접 구현해 보는 Python 콘솔 애플리케이션이다.  
-핵심은 시각적 인식이 아니라 `2차원 배열`, `필터(Filter)`, `MAC(Multiply-Accumulate)` 연산, `라벨 정규화`, `부동소수점 비교 정책`, `시간 복잡도 분석`에 있다.
+핵심은 시각적 인식이 아니라 `2차원 배열`, `필터(Filter)`, `MAC(Multiply-Accumulate)` 연산, `라벨 정규화`, `부동소수점 비교 정책`, `시간 복잡도 분석`, 그리고 보너스 과제인 `1차원 배열 최적화`와 `패턴 자동 생성기`에 있다.
 
 이 README는 단순 실행 가이드를 넘어서, 이번 미션을 학습용 한 권의 책처럼 다시 복습할 수 있도록 구성했다.
 
@@ -164,7 +164,7 @@ for row in range(size):
 3. 차이가 매우 작으면 `UNDECIDED`
 
 즉, 계산 함수와 판정 함수는 역할이 다르다.  
-`mac()`는 점수를 계산하고, `decide_label()`은 점수를 해석한다.
+`calculate_mac()`는 점수를 계산하고, `decide_label()`은 점수를 해석한다.
 
 ### 6-7. 예외 처리와 안전한 실패
 
@@ -292,20 +292,24 @@ epsilon은 "이 정도 차이면 같은 값으로 보자"라는 허용 오차다
 4. 라벨 정규화
 5. epsilon 기반 동점 처리
 6. 크기별 MAC 성능 측정
-7. PASS/FAIL 결과 요약
-8. 재현 가능한 기본 `data.json` 제공
+7. `2차원 MAC`과 `1차원 MAC` 성능 비교
+8. `Cross/X` 자동 생성 패턴 재사용
+9. PASS/FAIL 결과 요약
+10. 재현 가능한 기본 `data.json` 제공
 
 ## 9. 파일 구성
 
 ```text
-main.py     : 메인 실행 파일
-data.json   : 필터/패턴 테스트 데이터
-README.md   : 실행 방법 + 이론 설명 + 결과 리포트
+main.py       : 메뉴, 사용자 입력 모드, 콘솔 출력 흐름
+core.py       : 패턴 생성, MAC 연산, 1차원 최적화, 성능 측정
+data_mode.py  : data.json 로드, 라벨 정규화, 케이스 분석
+data.json     : 필터/패턴 테스트 데이터
+README.md     : 실행 방법 + 이론 설명 + 결과 리포트
 ```
 
 ## 10. 실행 방법
 
-### 8-1. 프로그램 실행
+### 10-1. 프로그램 실행
 
 ```bash
 python3 main.py
@@ -318,9 +322,14 @@ python3 main.py
 2. data.json 분석
 ```
 
-### 8-2. 사용자 입력 모드
+### 10-2. 사용자 입력 모드
 
-`3x3` 필터 A, 필터 B, 패턴을 각각 3줄씩 입력한다.
+사용자 입력 모드는 두 가지 방식으로 쓸 수 있다.
+
+1. 직접 입력
+2. 자동 생성 예제 사용
+
+직접 입력을 선택하면 `3x3` 필터 A, 필터 B, 패턴을 각각 3줄씩 입력한다.
 
 예시:
 
@@ -344,7 +353,15 @@ python3 main.py
 입력 형식 오류: 각 줄에 3개의 숫자를 공백으로 구분해 입력하세요.
 ```
 
-### 8-3. data.json 분석 모드
+자동 생성 예제 사용을 선택하면:
+
+1. 필터 A는 `Cross`
+2. 필터 B는 `X`
+3. 패턴은 `Cross` 또는 `X` 중에서 선택
+
+즉, 보너스 과제의 패턴 생성기를 모드 1에서도 바로 재사용할 수 있다.
+
+### 10-3. data.json 분석 모드
 
 프로그램이 `data.json`을 읽어서 다음 순서로 처리한다.
 
@@ -474,57 +491,96 @@ T(N) = O(N^2)
 
 ## 15. 코드 구조 설명
 
-`main.py`는 아래 함수들로 역할을 분리했다.
+처음에는 모든 기능이 `main.py` 한 파일에 있었지만, 설명 세션과 유지보수를 고려해서 너무 잘게 쪼개지지 않는 선에서 `기능별 3파일 구조`로 정리했다.
 
-### 13-1. 패턴 생성
+### 15-1. 파일별 역할
+
+1. `main.py`
+   프로그램 시작점, 메뉴 선택, 사용자 입력 모드, 콘솔 출력 담당
+2. `core.py`
+   패턴 생성기, 2차원 MAC, 1차원 MAC, 성능 측정 담당
+3. `data_mode.py`
+   `data.json` 로드, 필터 검증, 라벨 정규화, 케이스 분석 담당
+
+이렇게 나누면 발표할 때도 흐름이 단순해진다.
+
+1. `main.py`는 "무슨 순서로 실행되는가"
+2. `core.py`는 "어떻게 계산하는가"
+3. `data_mode.py`는 "JSON 데이터를 어떻게 해석하는가"
+
+### 15-2. 핵심 함수 묶음
+
+`core.py`
 
 1. `generate_cross_pattern(size)`
 2. `generate_x_pattern(size)`
+3. `generate_pattern(label, size)`
+4. `calculate_mac(pattern, matrix_filter)`
+5. `calculate_mac_flat(pattern, matrix_filter)`
+6. `benchmark_mac(size, repeat)`
 
-이 함수들은 보너스 과제 아이디어와도 연결된다.  
-특정 홀수 크기만 주면 Cross와 X 패턴을 자동 생성할 수 있다.
+`data_mode.py`
 
-### 13-2. 입력/스키마 검증
+1. `load_json_payload(data_file)`
+2. `load_filters(payload)`
+3. `analyze_pattern_case(case_id, case_payload, filters_by_size)`
 
-1. `read_console_matrix()`
-2. `read_numeric_row()`
-3. `coerce_matrix()`
-4. `extract_size_from_key()`
+`main.py`
 
-콘솔 입력 검증과 JSON 스키마 검증을 분리해 두면, 어느 단계에서 문제가 났는지 추적하기 쉬워진다.
-
-### 13-3. 핵심 연산
-
-1. `mac()`
-2. `decide_label()`
-3. `measure_average_ms()`
-
-`mac()` 함수는 외부 라이브러리 없이 중첩 반복문만으로 구현했다.  
-이 부분이 이번 과제의 핵심이다.
-
-### 13-4. 분석 흐름
-
-1. `run_user_input_mode()`
-2. `run_json_mode()`
-3. `analyze_pattern_case()`
+1. `choose_mode()`
+2. `run_user_input_mode()`
+3. `run_json_mode()`
 4. `print_performance_table()`
 
-즉, 입력 모드와 배치 모드를 분리하고, 공통 계산 로직은 재사용하는 구조다.
+### 15-3. 코드 흐름도
+
+실행 흐름은 아래처럼 생각하면 된다.
+
+```text
+main()
+ └─ choose_mode()
+    ├─ 1번 선택
+    │  └─ run_user_input_mode()
+    │     ├─ 직접 입력 또는 자동 생성 선택
+    │     ├─ 필터/패턴 준비
+    │     ├─ calculate_mac()로 A/B 점수 계산
+    │     ├─ 판정 출력
+    │     └─ benchmark_mac()으로 2D vs 1D 성능 비교
+    └─ 2번 선택
+       └─ run_json_mode()
+          ├─ load_json_payload()
+          ├─ load_filters()
+          ├─ analyze_pattern_case() 반복 실행
+          ├─ PASS/FAIL 출력
+          ├─ benchmark_mac()으로 성능 비교
+          └─ 결과 요약 출력
+```
+
+### 15-4. 왜 이렇게 나눴는가?
+
+이번 리팩토링의 목표는 "멋진 구조"가 아니라 "시험 전에 다시 읽기 쉬운 구조"였다.
+
+1. 파일 수를 너무 많이 늘리지 않았다.
+2. 핵심 연산은 `core.py`에 모았다.
+3. 데이터 분석은 `data_mode.py`로 분리했다.
+4. 실행 흐름은 `main.py`에서 한눈에 보이게 유지했다.
+
+즉, 발표할 때도 "메뉴는 여기, 계산은 여기, JSON 분석은 여기"라고 설명하기 쉬운 구조다.
 
 ## 16. 사용자 입력 모드 해설
 
 사용자 입력 모드는 가장 작은 단위의 실험실이라고 생각하면 된다.
 
-1. 필터 A 입력
-2. 필터 B 입력
-3. 패턴 입력
-4. A/B 각각 점수 계산
-5. 점수 비교
-6. 동점이면 판정 불가
-7. 3x3 단일 MAC 성능 측정
+1. 직접 입력 또는 자동 생성 선택
+2. 필터 A, B와 패턴 준비
+3. A/B 각각 점수 계산
+4. 점수 비교
+5. 동점이면 판정 불가
+6. 3x3 기준 `2D vs 1D` 성능 비교
 
 이 모드는 개념 확인에 좋다.  
-직접 Cross와 X를 넣어 보면, 왜 점수가 다르게 나오는지 눈으로 추적할 수 있다.
+직접 Cross와 X를 넣어 보면, 왜 점수가 다르게 나오는지 눈으로 추적할 수 있다.  
+또는 자동 생성 예제를 선택해서 빠르게 결과를 재현할 수도 있다.
 
 ## 17. data.json 모드 해설
 
@@ -585,7 +641,7 @@ T(N) = O(N^2)
 
 1. 라벨 정규화로 `+`, `cross`, `x` 표기를 내부 표준 라벨 `Cross`, `X`로 통일했다.
 2. 점수 비교에서 `epsilon = 1e-9` 정책을 사용해 부동소수점 미세 오차를 동점으로 안전하게 처리했다.
-3. 필터와 패턴은 `coerce_matrix()`에서 정사각형 여부와 크기 일치를 확인한다.
+3. 필터와 패턴은 `validate_matrix()`에서 정사각형 여부와 크기 일치를 확인한다.
 4. 패턴 키는 `size_N_idx` 정규식으로 검증한다.
 5. 필터 키는 `size_N` 정규식으로 검증한다.
 6. JSON 구조가 잘못되어도 프로그램이 바로 종료되지 않고, 가능한 범위에서 원인을 메시지로 드러낸다.
@@ -617,7 +673,8 @@ T(N) = O(N^2)
 ## 20. 성능 분석 해설
 
 프로그램은 각 크기별로 최소 10회 반복 측정 후 평균 시간을 출력한다.  
-측정 범위는 파일 읽기나 콘솔 입출력이 아니라 `MAC 함수 호출 구간` 중심이다.
+측정 범위는 파일 읽기나 콘솔 입출력이 아니라 `MAC 함수 호출 구간` 중심이다.  
+그리고 보너스 과제로 `2차원 배열 MAC`과 `1차원 배열 MAC`을 같은 입력, 같은 반복 횟수로 비교하도록 확장했다.
 
 이 방식이 중요한 이유는 다음과 같다.
 
@@ -626,7 +683,8 @@ T(N) = O(N^2)
 3. 크기 증가에 따른 추세를 보기 위해
 
 표에 함께 출력하는 `연산 횟수(N²)`는 단순 장식이 아니다.  
-실제 측정 시간이 왜 증가하는지 이론적으로 연결해 주는 근거다.
+실제 측정 시간이 왜 증가하는지 이론적으로 연결해 주는 근거다.  
+또한 `개선율` 열을 통해 1차원 접근이 실제로 얼마나 빨라졌는지도 함께 확인할 수 있다.
 
 예를 들어:
 
@@ -641,16 +699,20 @@ T(N) = O(N^2)
 아래 값은 한 번 실행했을 때의 예시이며, 컴퓨터 성능과 실행 시점에 따라 달라질 수 있다.
 
 ```text
-크기        평균 시간(ms)    연산 횟수(N²)
-3x3         0.002911         9
-5x5         0.005439         25
-13x13       0.025590         169
-25x25       0.085176         625
+크기        2D(ms)       1D(ms)       개선율       연산 횟수(N²)
+3x3         0.002962     0.001420     52.05%       9
+5x5         0.005468     0.002663     51.30%       25
+13x13       0.026451     0.014213     46.27%       169
+25x25       0.101761     0.054918     46.03%       625
 ```
 
-이 표를 보면 연산 횟수가 커질수록 평균 시간도 함께 증가한다.  
-정확히 비례해서 똑같이 증가하지는 않더라도, 전체 추세는 분명히 `N^2` 증가와 같은 방향을 보인다.  
-즉, 이론과 실측이 서로 모순되지 않고 잘 연결된다.
+이 표를 보면 두 가지를 동시에 읽을 수 있다.
+
+1. 연산 횟수가 커질수록 `2D`, `1D` 모두 평균 시간이 증가한다.
+2. 같은 입력이라면 `1D` 방식이 더 빠른 경우가 많다.
+
+즉, 이론적으로는 둘 다 `O(N^2)`이지만, 메모리 접근 패턴을 단순화하면 실제 실행 시간은 개선될 수 있다.  
+이것이 이번 보너스 과제의 핵심 포인트다.
 
 ## 21. 재현 방법
 
@@ -686,6 +748,14 @@ T(N) = O(N^2)
 
 1. A 점수보다 B 점수가 높다.
 2. 판정은 `B`다.
+
+자동 생성 예제를 쓰고 싶다면:
+
+1. 모드 `1` 선택
+2. 입력 방식에서 `2` 선택
+3. 생성할 패턴을 `Cross` 또는 `X`로 선택
+
+이 경우 필터 A/B는 자동으로 Cross/X가 채워진다.
 
 ### 21-2. data.json 모드
 
@@ -724,12 +794,12 @@ T(N) = O(N^2)
 예를 들어 아래 함수 선언을 보자.
 
 ```python
-def read_console_matrix(title: str, size: int) -> Matrix:
+def read_matrix_from_console(title: str, size: int) -> Matrix:
 ```
 
 이 문장은 다음 뜻을 가진다.
 
-1. 함수 이름은 `read_console_matrix`
+1. 함수 이름은 `read_matrix_from_console`
 2. `title` 매개변수는 `str` 타입으로 기대한다
 3. `size` 매개변수는 `int` 타입으로 기대한다
 4. 함수의 반환값은 `Matrix` 타입으로 기대한다
@@ -740,7 +810,7 @@ def read_console_matrix(title: str, size: int) -> Matrix:
 예:
 
 ```python
-def mac(pattern: Matrix, matrix_filter: Matrix) -> float:
+def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
 ```
 
 이 선언을 보면, 이 함수는 두 개의 행렬을 받아서 `float` 점수를 돌려준다는 사실을 한 줄로 이해할 수 있다.
@@ -825,7 +895,11 @@ class AnalysisResult:
 
 ### 23-6. 리스트 컴프리헨션
 
-Cross와 X 패턴 생성 함수에는 이런 문법이 있다.
+이번 리팩토링 이후 패턴 생성기는 반복문 버전으로 바꿨다.  
+처음 학습할 때는 컴프리헨션보다 반복문이 더 따라가기 쉬울 수 있다.  
+그래도 Python에서 자주 나오기 때문에 컴프리헨션 문법 자체는 알아둘 가치가 있다.
+
+예를 들어 아래 같은 형태가 대표적이다.
 
 ```python
 return [
@@ -879,10 +953,11 @@ for row in range(size):
 
 ### 23-8. 키워드 전용 인자 `*`
 
-아래 함수 선언은 초급 단계에서는 낯설 수 있다.
+아래 함수 선언은 초급 단계에서는 낯설 수 있다.  
+이번 리팩토링 버전의 메인 코드에서는 가독성을 위해 사용을 줄였지만, 실무 코드에서는 여전히 자주 본다.
 
 ```python
-def coerce_matrix(raw_matrix: object, *, expected_size: int | None = None, matrix_name: str = "matrix") -> Matrix:
+def some_function(data, *, expected_size=5, matrix_name="matrix"):
 ```
 
 여기서 `*` 뒤에 오는 인자들은 `키워드 전용 인자(keyword-only argument)`가 된다.  
@@ -891,7 +966,7 @@ def coerce_matrix(raw_matrix: object, *, expected_size: int | None = None, matri
 예:
 
 ```python
-coerce_matrix(data, expected_size=5, matrix_name="size_5.cross")
+some_function(data, expected_size=5, matrix_name="size_5.cross")
 ```
 
 이렇게 하면 인자의 의미가 더 분명해지고, 순서를 헷갈리는 실수를 줄일 수 있다.
@@ -1008,7 +1083,7 @@ for row_index, raw_row in enumerate(raw_matrix, start=1):
 성능 측정 함수 호출에서는 이런 문법이 나온다.
 
 ```python
-average_ms = measure_average_ms(lambda: mac(pattern, matrix_filter), repeat)
+average_ms_value = average_ms(lambda: calculate_mac(pattern, matrix_filter), repeat)
 ```
 
 `lambda`는 이름 없는 짧은 함수를 만드는 문법이다.
@@ -1017,7 +1092,7 @@ average_ms = measure_average_ms(lambda: mac(pattern, matrix_filter), repeat)
 
 ```python
 def temp():
-    return mac(pattern, matrix_filter)
+    return calculate_mac(pattern, matrix_filter)
 ```
 
 짧은 동작을 함수 인자로 넘길 때 유용하다.
@@ -1027,7 +1102,7 @@ def temp():
 이와 연결해서 다음 타입 힌트도 이해할 필요가 있다.
 
 ```python
-def measure_average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> float:
+def average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> float:
 ```
 
 `Callable[[], object]`는 "인자를 받지 않고 어떤 값을 반환하는 호출 가능한 객체"라는 뜻이다.  
@@ -1074,20 +1149,22 @@ match = re.fullmatch(r"size_(\d+)_(\d+)", pattern_key)
 다음 함수는 값을 두 개 돌려준다.
 
 ```python
-def benchmark_single_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, int]:
+def benchmark_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, float, int, float]:
 ```
 
 반환값은 다음 두 개다.
 
-1. 평균 시간
-2. 연산 횟수
+1. 2차원 평균 시간
+2. 1차원 평균 시간
+3. 연산 횟수
+4. 개선율
 
 Python은 이런 식으로 여러 값을 `튜플(tuple)` 형태로 자연스럽게 반환할 수 있다.
 
 예:
 
 ```python
-average_ms, operations = benchmark_single_mac(5)
+average_2d, average_1d, operations, improvement = benchmark_mac(5)
 ```
 
 이 문법을 `언패킹(unpacking)`이라고도 부른다.
@@ -1130,13 +1207,13 @@ if __name__ == "__main__":
 
 ## 24. 확장 아이디어
 
-이번 구현은 필수 요구사항 중심이지만, 여기서 더 발전시킬 수도 있다.
+이번 구현은 보너스 과제까지 반영했지만, 여기서 더 발전시킬 수도 있다.
 
-1. 2차원 배열을 1차원 배열로 평탄화해서 메모리 접근 패턴을 단순화하기
-2. 노이즈가 섞인 패턴을 자동 생성해서 강건성 테스트하기
-3. 여러 필터를 동시에 비교하는 다중 클래스 분류기로 확장하기
-4. 슬라이딩 윈도우를 도입해 진짜 합성곱(convolution)처럼 확장하기
-5. 결과를 CSV나 로그 파일로 저장하기
+1. 랜덤 노이즈가 섞인 패턴을 자동 생성해서 강건성 테스트하기
+2. 여러 필터를 동시에 비교하는 다중 클래스 분류기로 확장하기
+3. 슬라이딩 윈도우를 도입해 진짜 합성곱(convolution)처럼 확장하기
+4. 결과를 CSV나 로그 파일로 저장하기
+5. 1차원 최적화 버전을 실제 판정 경로에도 선택적으로 적용하기
 
 ## 25. 마무리 정리
 

@@ -11,17 +11,49 @@ from core import (
     generate_cross_pattern,
     generate_pattern,
     generate_x_pattern,
+    validate_generator_size,
 )
 from data_mode import analyze_pattern_case, load_filters, load_json_payload, pattern_sort_key
 
 DATA_FILE = Path(__file__).with_name("data.json")
 
 
+def format_matrix_row(row):
+    """행렬 한 줄을 콘솔 출력용 문자열로 바꾼다.
+
+    큰 행렬은 앞쪽과 뒤쪽 일부 값만 보여 주어 화면이 지나치게 길어지는 일을 막는다.
+    """
+    values = []
+    for value in row:
+        if isinstance(value, int):
+            values.append(str(value))
+        elif value.is_integer():
+            values.append(str(int(value)))
+        else:
+            values.append(str(value))
+
+    if len(values) <= 12:
+        return " ".join(values)
+
+    return " ".join(values[:6]) + " ... " + " ".join(values[-6:])
+
+
 def print_matrix(title, matrix):
     """2차원 배열을 사람이 읽기 쉬운 표 모양으로 출력한다."""
     print(title)
-    for row in matrix:
-        print(" ".join(str(int(value)) if value.is_integer() else str(value) for value in row))
+
+    size = len(matrix)
+    if size <= 12:
+        for row in matrix:
+            print(format_matrix_row(row))
+        return
+
+    for row in matrix[:3]:
+        print(format_matrix_row(row))
+    print("...")
+    for row in matrix[-3:]:
+        print(format_matrix_row(row))
+    print(f"({size}x{size} 행렬, 앞/뒤 3행과 각 행의 앞/뒤 6개 값만 표시)")
 
 
 def read_numeric_row(size, row_number):
@@ -89,11 +121,28 @@ def choose_generated_label():
     return "Cross" if choice == "1" else "X"
 
 
+def read_generated_size():
+    """자동 생성할 패턴 크기 N을 입력받는다."""
+    while True:
+        raw_value = input("패턴 크기 N 입력(1 이상의 홀수, 예: 3, 5, 13, 25): ").strip()
+
+        try:
+            size = int(raw_value)
+            validate_generator_size(size)
+            return size
+        except ValueError as error:
+            if raw_value.lstrip("-").isdigit():
+                print(error)
+            else:
+                print("입력 형식 오류: 패턴 크기 N은 1 이상의 홀수 정수로 입력하세요.")
+
+
 def get_user_mode_matrices():
     """사용자 입력 모드에서 필터 A, 필터 B, 패턴을 준비한다.
 
     직접 입력을 고르면 콘솔에서 3x3 행렬을 받는다.
-    자동 생성 예제를 고르면 Cross 필터, X 필터, 선택한 패턴을 코드가 대신 만든다.
+    자동 생성 예제를 고르면 크기 N을 입력받아 Cross 필터, X 필터,
+    선택한 패턴을 코드가 대신 만든다.
     """
     print()
     mode = choose_from_menu(
@@ -118,12 +167,13 @@ def get_user_mode_matrices():
         print("# [3] 패턴 입력")
         print("#---------------------------------------")
         pattern = read_matrix_from_console("패턴 (3줄 입력, 공백 구분)", 3)
-        return filter_a, filter_b, pattern
+        return filter_a, filter_b, pattern, 3
 
+    size = read_generated_size()
     pattern_label = choose_generated_label()
-    filter_a = generate_cross_pattern(3)
-    filter_b = generate_x_pattern(3)
-    pattern = generate_pattern(pattern_label, 3)
+    filter_a = generate_cross_pattern(size)
+    filter_b = generate_x_pattern(size)
+    pattern = generate_pattern(pattern_label, size)
 
     print()
     print("#---------------------------------------")
@@ -135,7 +185,7 @@ def get_user_mode_matrices():
     print()
     print_matrix(f"패턴 = {pattern_label}", pattern)
 
-    return filter_a, filter_b, pattern
+    return filter_a, filter_b, pattern, size
 
 
 def print_performance_table(sizes, section_number):
@@ -182,17 +232,17 @@ def run_user_input_mode():
     """사용자 입력 모드 전체 흐름을 실행한다.
 
     필터와 패턴을 준비하고, 두 필터의 MAC 점수를 계산한 뒤,
-    결과와 3x3 성능 분석 표를 차례대로 보여 준다.
+    결과와 현재 패턴 크기의 성능 분석 표를 차례대로 보여 준다.
     """
     print()
-    filter_a, filter_b, pattern = get_user_mode_matrices()
+    filter_a, filter_b, pattern, size = get_user_mode_matrices()
 
     score_a = calculate_mac(pattern, filter_a)
     score_b = calculate_mac(pattern, filter_b)
     average_time = average_two_filter_ms(pattern, filter_a, filter_b)
 
     print_user_mode_result(score_a, score_b, average_time)
-    print_performance_table([3], section_number=5)
+    print_performance_table([size], section_number=5)
 
 
 def print_case_result(result):
@@ -283,7 +333,7 @@ def choose_mode():
     return choose_from_menu(
         "[모드 선택]",
         {
-            "1": "사용자 입력 (3x3)",
+            "1": "사용자 입력 (3x3) / 자동 생성 (NxN)",
             "2": "data.json 분석",
         },
     )

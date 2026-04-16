@@ -35,7 +35,7 @@ def format_score(value):
 def validate_generator_size(size):
     """자동 패턴 생성에 사용할 크기가 올바른지 확인한다.
 
-    Cross와 X 패턴은 가운데 칸이 있어야 자연스럽기 때문에 홀수 크기만 허용한다.
+    Cross와 X 패턴은 가운데 칸이 기준이므로 1 이상의 홀수 크기만 허용한다.
     예를 들어 3x3, 5x5, 13x13은 가능하지만 4x4는 가운데 한 칸이 없다.
     """
     if size < 1 or size % 2 == 0:

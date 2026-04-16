@@ -17,6 +17,12 @@ from core import (
 
 @dataclass
 class AnalysisResult:
+    """data.json의 패턴 한 건을 분석한 결과를 담는 상자다.
+
+    점수, 예측 라벨, PASS/FAIL 여부, 실패 이유를 한 곳에 모아 두면
+    출력 함수가 복잡한 계산 과정을 몰라도 결과를 깔끔하게 보여 줄 수 있다.
+    """
+
     case_id: str
     expected: str | None
     prediction: str
@@ -27,6 +33,10 @@ class AnalysisResult:
 
 
 def extract_size_from_key(case_id: str) -> int | None:
+    """'size_13_1' 같은 케이스 이름에서 패턴 크기 13을 꺼낸다.
+
+    이름 형식이 맞지 않으면 None을 반환해서 해당 케이스를 안전하게 FAIL 처리하게 한다.
+    """
     match = re.fullmatch(r"size_(\d+)_(\d+)", case_id)
     if match is None:
         return None
@@ -34,6 +44,11 @@ def extract_size_from_key(case_id: str) -> int | None:
 
 
 def pattern_sort_key(case_id: str) -> tuple[int, int, str]:
+    """패턴 케이스를 크기와 번호 순서로 보기 좋게 정렬하기 위한 기준을 만든다.
+
+    예를 들어 size_5_1, size_5_2, size_13_1 순서로 출력되게 한다.
+    형식이 이상한 키는 맨 뒤쪽으로 보내서 정상 케이스를 먼저 볼 수 있게 한다.
+    """
     match = re.fullmatch(r"size_(\d+)_(\d+)", case_id)
     if match is None:
         return (10**9, 10**9, case_id)
@@ -41,6 +56,7 @@ def pattern_sort_key(case_id: str) -> tuple[int, int, str]:
 
 
 def sort_filter_key(filter_key: str) -> tuple[int, str]:
+    """필터 묶음을 size_5, size_13, size_25처럼 크기 순서로 정렬하기 위한 기준을 만든다."""
     match = re.fullmatch(r"size_(\d+)", filter_key)
     if match is None:
         return (10**9, filter_key)
@@ -48,6 +64,11 @@ def sort_filter_key(filter_key: str) -> tuple[int, str]:
 
 
 def load_json_payload(data_file: Path) -> dict[str, object]:
+    """data.json 파일을 읽고 최상위 구조가 JSON 객체인지 확인한다.
+
+    프로그램은 filters와 patterns라는 이름으로 데이터를 찾아야 하므로,
+    최상위가 배열이나 문자열이면 이후 처리를 진행할 수 없다.
+    """
     with data_file.open("r", encoding="utf-8") as file:
         payload = json.load(file)
 
@@ -58,6 +79,11 @@ def load_json_payload(data_file: Path) -> dict[str, object]:
 
 
 def load_filters(payload: dict[str, object]) -> tuple[dict[int, dict[str, Matrix]], list[str]]:
+    """data.json의 filters 영역을 읽어 크기별 Cross/X 필터로 정리한다.
+
+    필터 키의 size_N 규칙, cross/x 라벨 정규화, 행렬 크기 검증을 모두 수행한다.
+    실패한 필터 묶음은 메시지로 남기고, 성공한 필터만 분석에 사용할 수 있게 돌려준다.
+    """
     raw_filters = payload.get("filters")
     if not isinstance(raw_filters, dict):
         raise ValueError("data.json에 filters 객체가 없습니다.")
@@ -106,6 +132,11 @@ def load_filters(payload: dict[str, object]) -> tuple[dict[int, dict[str, Matrix
 
 
 def analyze_pattern_case(case_id: str, case_payload: object, filters_by_size: dict[int, dict[str, Matrix]]) -> AnalysisResult:
+    """data.json의 패턴 한 건을 검증하고 Cross/X 판정을 수행한다.
+
+    케이스 키에서 크기를 찾고, expected 라벨을 표준화하고, 입력 행렬 크기를 확인한다.
+    문제가 있으면 프로그램을 멈추지 않고 AnalysisResult에 실패 이유를 담아 반환한다.
+    """
     if not isinstance(case_payload, dict):
         return AnalysisResult(case_id, None, "ERROR", None, None, False, "케이스 구조가 객체가 아닙니다.")
 

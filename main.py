@@ -21,12 +21,18 @@ DATA_FILE = Path(__file__).with_name("data.json")
 
 
 def print_matrix(title: str, matrix: Matrix) -> None:
+    """2차원 배열을 사람이 읽기 쉬운 표 모양으로 출력한다."""
     print(title)
     for row in matrix:
         print(" ".join(str(int(value)) if value.is_integer() else str(value) for value in row))
 
 
 def read_numeric_row(size: int, row_number: int) -> list[float]:
+    """콘솔에서 숫자 한 줄을 입력받아 float 리스트로 바꾼다.
+
+    사용자가 숫자가 아닌 값을 넣거나, 필요한 개수보다 적거나 많이 입력하면
+    ValueError를 발생시켜 다시 입력하도록 안내할 수 있게 한다.
+    """
     raw_line = input(f"{row_number}행> ").strip()
     values = raw_line.split()
 
@@ -44,6 +50,11 @@ def read_numeric_row(size: int, row_number: int) -> list[float]:
 
 
 def read_matrix_from_console(title: str, size: int) -> Matrix:
+    """사용자에게 size줄을 입력받아 size x size 행렬을 만든다.
+
+    한 줄 입력이 잘못되면 프로그램을 종료하지 않고 오류 메시지를 보여 준 뒤
+    같은 줄을 다시 입력받는다.
+    """
     print(title)
     matrix: Matrix = []
 
@@ -57,6 +68,7 @@ def read_matrix_from_console(title: str, size: int) -> Matrix:
 
 
 def choose_from_menu(title: str, options: dict[str, str]) -> str:
+    """메뉴를 출력하고 사용자가 올바른 번호를 고를 때까지 반복한다."""
     while True:
         print(title)
         for key, text in options.items():
@@ -69,6 +81,7 @@ def choose_from_menu(title: str, options: dict[str, str]) -> str:
 
 
 def choose_generated_label() -> str:
+    """자동 생성 예제에서 만들 패턴이 Cross인지 X인지 선택받는다."""
     choice = choose_from_menu(
         "[자동 생성 패턴 선택]",
         {
@@ -80,6 +93,11 @@ def choose_generated_label() -> str:
 
 
 def get_user_mode_matrices() -> tuple[Matrix, Matrix, Matrix]:
+    """사용자 입력 모드에서 필터 A, 필터 B, 패턴을 준비한다.
+
+    직접 입력을 고르면 콘솔에서 3x3 행렬을 받는다.
+    자동 생성 예제를 고르면 Cross 필터, X 필터, 선택한 패턴을 코드가 대신 만든다.
+    """
     print()
     mode = choose_from_menu(
         "[1] 입력 방식 선택",
@@ -124,6 +142,10 @@ def get_user_mode_matrices() -> tuple[Matrix, Matrix, Matrix]:
 
 
 def print_performance_table(sizes: list[int], section_number: int) -> None:
+    """여러 크기에 대해 MAC 평균 실행 시간과 연산 횟수를 표로 출력한다.
+
+    2D 방식과 1D 방식의 시간을 함께 보여 주어 보너스 최적화 효과도 확인할 수 있다.
+    """
     print("#---------------------------------------")
     print(f"# [{section_number}] 성능 분석 (평균/{REPEAT_COUNT}회, 2D vs 1D 비교)")
     print("#---------------------------------------")
@@ -140,6 +162,7 @@ def print_performance_table(sizes: list[int], section_number: int) -> None:
 
 
 def print_user_mode_result(score_a: float, score_b: float, average_ms_value: float) -> None:
+    """사용자 입력 모드의 MAC 점수, 평균 시간, 최종 판정을 출력한다."""
     print()
     print("#---------------------------------------")
     print("# [4] MAC 결과")
@@ -159,6 +182,11 @@ def print_user_mode_result(score_a: float, score_b: float, average_ms_value: flo
 
 
 def run_user_input_mode() -> None:
+    """사용자 입력 모드 전체 흐름을 실행한다.
+
+    필터와 패턴을 준비하고, 두 필터의 MAC 점수를 계산한 뒤,
+    결과와 3x3 성능 분석 표를 차례대로 보여 준다.
+    """
     print()
     filter_a, filter_b, pattern = get_user_mode_matrices()
 
@@ -171,6 +199,7 @@ def run_user_input_mode() -> None:
 
 
 def print_case_result(result: AnalysisResult) -> None:
+    """data.json 패턴 한 건의 분석 결과를 콘솔에 출력한다."""
     expected_label = result.expected if result.expected is not None else "N/A"
     outcome = "PASS" if result.passed else "FAIL"
 
@@ -186,6 +215,7 @@ def print_case_result(result: AnalysisResult) -> None:
 
 
 def print_summary(results: list[AnalysisResult]) -> None:
+    """data.json 분석 전체 결과의 총 테스트, 통과, 실패 수를 요약한다."""
     total_count = len(results)
     passed_count = sum(1 for result in results if result.passed)
     failed_results = [result for result in results if not result.passed]
@@ -205,6 +235,11 @@ def print_summary(results: list[AnalysisResult]) -> None:
 
 
 def run_json_mode() -> None:
+    """data.json 분석 모드 전체 흐름을 실행한다.
+
+    파일 로드, 필터 검증, 패턴별 MAC 판정, 성능 분석, 결과 요약을 순서대로 진행한다.
+    JSON 구조가 잘못된 경우에는 오류 메시지를 출력하고 안전하게 종료한다.
+    """
     print()
     print("#---------------------------------------")
     print("# [1] 필터 로드")
@@ -247,6 +282,7 @@ def run_json_mode() -> None:
 
 
 def choose_mode() -> str:
+    """프로그램 시작 시 사용자 입력 모드와 data.json 분석 모드 중 하나를 선택받는다."""
     return choose_from_menu(
         "[모드 선택]",
         {
@@ -257,6 +293,7 @@ def choose_mode() -> str:
 
 
 def main() -> None:
+    """Mini NPU Simulator의 시작점이다."""
     print("=== Mini NPU Simulator ===")
     selected_mode = choose_mode()
 

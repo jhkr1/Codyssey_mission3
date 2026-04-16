@@ -11,6 +11,11 @@ FlatMatrix = list[float]
 
 
 def normalize_label(raw_label: object) -> str | None:
+    """여러 방식으로 적힌 라벨을 프로그램 내부 표준 이름으로 바꾼다.
+
+    data.json에서는 Cross가 '+' 또는 'cross'로 들어올 수 있다.
+    이렇게 표현이 달라도 같은 뜻이면 같은 이름으로 맞춰야 PASS/FAIL 비교가 안정적이다.
+    """
     if not isinstance(raw_label, str):
         return None
 
@@ -23,21 +28,33 @@ def normalize_label(raw_label: object) -> str | None:
 
 
 def format_score(value: float | None) -> str:
+    """MAC 점수를 화면에 보기 좋게 출력할 문자열로 바꾼다.
+
+    계산에 실패한 경우에는 숫자가 없으므로 'N/A'를 보여 준다.
+    정상 점수는 부동소수점 차이를 확인할 수 있도록 소수점 아래를 넉넉히 출력한다.
+    """
     if value is None:
         return "N/A"
     return f"{value:.16f}"
 
 
 def validate_generator_size(size: int) -> None:
+    """자동 패턴 생성에 사용할 크기가 올바른지 확인한다.
+
+    Cross와 X 패턴은 가운데 칸이 있어야 자연스럽기 때문에 홀수 크기만 허용한다.
+    예를 들어 3x3, 5x5, 13x13은 가능하지만 4x4는 가운데 한 칸이 없다.
+    """
     if size < 1 or size % 2 == 0:
         raise ValueError("패턴 생성기는 1 이상의 홀수 크기만 지원합니다.")
 
 
 def create_empty_matrix(size: int) -> Matrix:
+    """모든 값이 0.0인 size x size 2차원 배열을 만든다."""
     return [[0.0 for _ in range(size)] for _ in range(size)]
 
 
 def generate_cross_pattern(size: int) -> Matrix:
+    """가운데 행과 가운데 열이 1인 Cross 패턴을 자동 생성한다."""
     validate_generator_size(size)
 
     result = create_empty_matrix(size)
@@ -52,6 +69,7 @@ def generate_cross_pattern(size: int) -> Matrix:
 
 
 def generate_x_pattern(size: int) -> Matrix:
+    """두 대각선이 1인 X 패턴을 자동 생성한다."""
     validate_generator_size(size)
 
     result = create_empty_matrix(size)
@@ -65,6 +83,7 @@ def generate_x_pattern(size: int) -> Matrix:
 
 
 def generate_pattern(label: str, size: int) -> Matrix:
+    """라벨 이름에 맞는 패턴 생성 함수를 골라 실행한다."""
     if label == "Cross":
         return generate_cross_pattern(size)
     if label == "X":
@@ -73,6 +92,11 @@ def generate_pattern(label: str, size: int) -> Matrix:
 
 
 def flatten_matrix(matrix: Matrix) -> FlatMatrix:
+    """2차원 배열을 한 줄짜리 1차원 배열로 바꾼다.
+
+    보너스 과제의 1D 최적화에서 사용한다.
+    행을 위에서 아래로 읽고, 각 행의 값을 왼쪽에서 오른쪽으로 이어 붙인다.
+    """
     flat: FlatMatrix = []
     for row in matrix:
         for value in row:
@@ -81,6 +105,11 @@ def flatten_matrix(matrix: Matrix) -> FlatMatrix:
 
 
 def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: str = "matrix") -> Matrix:
+    """외부에서 들어온 값이 올바른 정사각형 숫자 배열인지 검사한다.
+
+    JSON 데이터처럼 외부 입력은 모양이 틀릴 수 있으므로 바로 계산에 쓰면 위험하다.
+    이 함수는 2차원 배열인지, 정사각형인지, 숫자로만 구성됐는지 확인한 뒤 float 행렬로 돌려준다.
+    """
     if not isinstance(raw_matrix, list) or not raw_matrix:
         raise ValueError(f"{name}는 비어 있지 않은 2차원 배열이어야 합니다.")
 
@@ -110,6 +139,11 @@ def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: 
 
 
 def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
+    """2차원 패턴과 필터를 같은 위치끼리 곱한 뒤 모두 더해 MAC 점수를 구한다.
+
+    점수가 높을수록 입력 패턴이 해당 필터와 더 비슷하다고 해석한다.
+    NumPy 같은 외부 라이브러리 없이 이중 반복문으로 직접 계산한다.
+    """
     if len(pattern) != len(matrix_filter):
         raise ValueError("패턴과 필터의 크기가 다릅니다.")
 
@@ -127,6 +161,11 @@ def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
 
 
 def calculate_mac_flat(pattern: FlatMatrix, matrix_filter: FlatMatrix) -> float:
+    """1차원으로 펼친 패턴과 필터의 MAC 점수를 계산한다.
+
+    계산 원리는 calculate_mac()과 같지만, 행/열 인덱스 대신 한 개의 index로 접근한다.
+    2차원 배열보다 접근 과정이 단순해서 성능 비교용으로 사용한다.
+    """
     if len(pattern) != len(matrix_filter):
         raise ValueError("1차원 패턴과 필터의 길이가 다릅니다.")
 
@@ -138,6 +177,11 @@ def calculate_mac_flat(pattern: FlatMatrix, matrix_filter: FlatMatrix) -> float:
 
 
 def average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> float:
+    """전달받은 작업을 여러 번 실행하고 평균 실행 시간을 ms 단위로 구한다.
+
+    한 번만 측정하면 컴퓨터 상태에 따라 값이 흔들릴 수 있다.
+    그래서 같은 작업을 repeat번 반복한 뒤 평균을 내어 성능 표에 사용한다.
+    """
     durations: list[float] = []
 
     for _ in range(repeat):
@@ -150,6 +194,11 @@ def average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> f
 
 
 def decide_label(score_cross: float, score_x: float, epsilon: float = EPSILON) -> str:
+    """Cross 점수와 X 점수를 비교해 최종 라벨을 결정한다.
+
+    두 점수 차이가 epsilon보다 작으면 사실상 동점으로 보고 UNDECIDED를 반환한다.
+    이 정책은 부동소수점의 아주 작은 오차 때문에 억지 판정이 나는 일을 막는다.
+    """
     if abs(score_cross - score_x) < epsilon:
         return "UNDECIDED"
     if score_cross > score_x:
@@ -158,12 +207,18 @@ def decide_label(score_cross: float, score_x: float, epsilon: float = EPSILON) -
 
 
 def calculate_two_scores(pattern: Matrix, cross_filter: Matrix, x_filter: Matrix) -> tuple[float, float]:
+    """하나의 패턴에 Cross 필터와 X 필터를 각각 적용해 두 점수를 함께 구한다."""
     score_cross = calculate_mac(pattern, cross_filter)
     score_x = calculate_mac(pattern, x_filter)
     return score_cross, score_x
 
 
 def benchmark_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, float, int, float]:
+    """주어진 크기에서 2D MAC과 1D MAC의 평균 시간을 비교한다.
+
+    같은 Cross 패턴을 사용해 2차원 계산과 1차원 계산을 각각 측정한다.
+    반환값에는 평균 시간, 연산 칸 수(N²), 1D 방식의 개선율이 들어 있다.
+    """
     pattern_2d = generate_cross_pattern(size)
     filter_2d = generate_cross_pattern(size)
     pattern_1d = flatten_matrix(pattern_2d)

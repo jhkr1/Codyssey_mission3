@@ -1,16 +1,10 @@
-from __future__ import annotations
-
 import time
-from typing import Callable
 
 EPSILON = 1e-9
 REPEAT_COUNT = 10
 
-Matrix = list[list[float]]
-FlatMatrix = list[float]
 
-
-def normalize_label(raw_label: object) -> str | None:
+def normalize_label(raw_label):
     """여러 방식으로 적힌 라벨을 프로그램 내부 표준 이름으로 바꾼다.
 
     data.json에서는 Cross가 '+' 또는 'cross'로 들어올 수 있다.
@@ -27,7 +21,7 @@ def normalize_label(raw_label: object) -> str | None:
     return mapping.get(raw_label.strip().lower())
 
 
-def format_score(value: float | None) -> str:
+def format_score(value):
     """MAC 점수를 화면에 보기 좋게 출력할 문자열로 바꾼다.
 
     계산에 실패한 경우에는 숫자가 없으므로 'N/A'를 보여 준다.
@@ -38,7 +32,7 @@ def format_score(value: float | None) -> str:
     return f"{value:.16f}"
 
 
-def validate_generator_size(size: int) -> None:
+def validate_generator_size(size):
     """자동 패턴 생성에 사용할 크기가 올바른지 확인한다.
 
     Cross와 X 패턴은 가운데 칸이 있어야 자연스럽기 때문에 홀수 크기만 허용한다.
@@ -48,12 +42,18 @@ def validate_generator_size(size: int) -> None:
         raise ValueError("패턴 생성기는 1 이상의 홀수 크기만 지원합니다.")
 
 
-def create_empty_matrix(size: int) -> Matrix:
+def create_empty_matrix(size):
     """모든 값이 0.0인 size x size 2차원 배열을 만든다."""
-    return [[0.0 for _ in range(size)] for _ in range(size)]
+    matrix = []
+    for _ in range(size):
+        row = []
+        for _ in range(size):
+            row.append(0.0)
+        matrix.append(row)
+    return matrix
 
 
-def generate_cross_pattern(size: int) -> Matrix:
+def generate_cross_pattern(size):
     """가운데 행과 가운데 열이 1인 Cross 패턴을 자동 생성한다."""
     validate_generator_size(size)
 
@@ -68,7 +68,7 @@ def generate_cross_pattern(size: int) -> Matrix:
     return result
 
 
-def generate_x_pattern(size: int) -> Matrix:
+def generate_x_pattern(size):
     """두 대각선이 1인 X 패턴을 자동 생성한다."""
     validate_generator_size(size)
 
@@ -82,7 +82,7 @@ def generate_x_pattern(size: int) -> Matrix:
     return result
 
 
-def generate_pattern(label: str, size: int) -> Matrix:
+def generate_pattern(label, size):
     """라벨 이름에 맞는 패턴 생성 함수를 골라 실행한다."""
     if label == "Cross":
         return generate_cross_pattern(size)
@@ -91,20 +91,20 @@ def generate_pattern(label: str, size: int) -> Matrix:
     raise ValueError(f"알 수 없는 패턴 라벨입니다: {label}")
 
 
-def flatten_matrix(matrix: Matrix) -> FlatMatrix:
+def flatten_matrix(matrix):
     """2차원 배열을 한 줄짜리 1차원 배열로 바꾼다.
 
     보너스 과제의 1D 최적화에서 사용한다.
     행을 위에서 아래로 읽고, 각 행의 값을 왼쪽에서 오른쪽으로 이어 붙인다.
     """
-    flat: FlatMatrix = []
+    flat = []
     for row in matrix:
         for value in row:
             flat.append(value)
     return flat
 
 
-def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: str = "matrix") -> Matrix:
+def validate_matrix(raw_matrix, expected_size=None, name="matrix"):
     """외부에서 들어온 값이 올바른 정사각형 숫자 배열인지 검사한다.
 
     JSON 데이터처럼 외부 입력은 모양이 틀릴 수 있으므로 바로 계산에 쓰면 위험하다.
@@ -117,7 +117,7 @@ def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: 
     if expected_size is not None and size != expected_size:
         raise ValueError(f"{name}의 행 수가 {expected_size}가 아닙니다.")
 
-    matrix: Matrix = []
+    matrix = []
     for row_index, raw_row in enumerate(raw_matrix, start=1):
         if not isinstance(raw_row, list):
             raise ValueError(f"{name}의 {row_index}행이 배열 형식이 아닙니다.")
@@ -128,7 +128,7 @@ def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: 
         if expected_size is not None and len(raw_row) != expected_size:
             raise ValueError(f"{name}의 열 수가 {expected_size}가 아닙니다.")
 
-        row: list[float] = []
+        row = []
         for col_index, value in enumerate(raw_row, start=1):
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"{name}의 {row_index}행 {col_index}열 값은 숫자여야 합니다.")
@@ -138,7 +138,7 @@ def validate_matrix(raw_matrix: object, expected_size: int | None = None, name: 
     return matrix
 
 
-def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
+def calculate_mac(pattern, matrix_filter):
     """2차원 패턴과 필터를 같은 위치끼리 곱한 뒤 모두 더해 MAC 점수를 구한다.
 
     점수가 높을수록 입력 패턴이 해당 필터와 더 비슷하다고 해석한다.
@@ -151,8 +151,11 @@ def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
     size = len(pattern)
 
     for row in range(size):
-        if len(pattern[row]) != len(matrix_filter[row]):
-            raise ValueError("패턴과 필터의 열 수가 다릅니다.")
+        if len(pattern[row]) != size:
+            raise ValueError("패턴이 정사각형 2차원 배열이 아닙니다.")
+
+        if len(matrix_filter[row]) != size:
+            raise ValueError("필터가 정사각형 2차원 배열이 아닙니다.")
 
         for col in range(size):
             total += pattern[row][col] * matrix_filter[row][col]
@@ -160,7 +163,7 @@ def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
     return total
 
 
-def calculate_mac_flat(pattern: FlatMatrix, matrix_filter: FlatMatrix) -> float:
+def calculate_mac_flat(pattern, matrix_filter):
     """1차원으로 펼친 패턴과 필터의 MAC 점수를 계산한다.
 
     계산 원리는 calculate_mac()과 같지만, 행/열 인덱스 대신 한 개의 index로 접근한다.
@@ -176,24 +179,51 @@ def calculate_mac_flat(pattern: FlatMatrix, matrix_filter: FlatMatrix) -> float:
     return total
 
 
-def average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> float:
-    """전달받은 작업을 여러 번 실행하고 평균 실행 시간을 ms 단위로 구한다.
+def average_mac_ms(pattern, matrix_filter, repeat=REPEAT_COUNT):
+    """2차원 MAC 연산을 여러 번 실행하고 평균 실행 시간을 ms 단위로 구한다.
 
     한 번만 측정하면 컴퓨터 상태에 따라 값이 흔들릴 수 있다.
     그래서 같은 작업을 repeat번 반복한 뒤 평균을 내어 성능 표에 사용한다.
     """
-    durations: list[float] = []
+    durations = []
 
     for _ in range(repeat):
         start = time.perf_counter()
-        operation()
+        calculate_mac(pattern, matrix_filter)
         end = time.perf_counter()
         durations.append((end - start) * 1000)
 
     return sum(durations) / len(durations)
 
 
-def decide_label(score_cross: float, score_x: float, epsilon: float = EPSILON) -> str:
+def average_mac_flat_ms(pattern, matrix_filter, repeat=REPEAT_COUNT):
+    """1차원 MAC 연산을 여러 번 실행하고 평균 실행 시간을 ms 단위로 구한다."""
+    durations = []
+
+    for _ in range(repeat):
+        start = time.perf_counter()
+        calculate_mac_flat(pattern, matrix_filter)
+        end = time.perf_counter()
+        durations.append((end - start) * 1000)
+
+    return sum(durations) / len(durations)
+
+
+def average_two_filter_ms(pattern, filter_a, filter_b, repeat=REPEAT_COUNT):
+    """사용자 입력 모드에서 필터 2개의 MAC 연산 평균 시간을 구한다."""
+    durations = []
+
+    for _ in range(repeat):
+        start = time.perf_counter()
+        calculate_mac(pattern, filter_a)
+        calculate_mac(pattern, filter_b)
+        end = time.perf_counter()
+        durations.append((end - start) * 1000)
+
+    return sum(durations) / len(durations)
+
+
+def decide_label(score_cross, score_x, epsilon=EPSILON):
     """Cross 점수와 X 점수를 비교해 최종 라벨을 결정한다.
 
     두 점수 차이가 epsilon보다 작으면 사실상 동점으로 보고 UNDECIDED를 반환한다.
@@ -206,14 +236,14 @@ def decide_label(score_cross: float, score_x: float, epsilon: float = EPSILON) -
     return "X"
 
 
-def calculate_two_scores(pattern: Matrix, cross_filter: Matrix, x_filter: Matrix) -> tuple[float, float]:
+def calculate_two_scores(pattern, cross_filter, x_filter):
     """하나의 패턴에 Cross 필터와 X 필터를 각각 적용해 두 점수를 함께 구한다."""
     score_cross = calculate_mac(pattern, cross_filter)
     score_x = calculate_mac(pattern, x_filter)
     return score_cross, score_x
 
 
-def benchmark_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, float, int, float]:
+def benchmark_mac(size, repeat=REPEAT_COUNT):
     """주어진 크기에서 2D MAC과 1D MAC의 평균 시간을 비교한다.
 
     같은 Cross 패턴을 사용해 2차원 계산과 1차원 계산을 각각 측정한다.
@@ -224,8 +254,8 @@ def benchmark_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, float, 
     pattern_1d = flatten_matrix(pattern_2d)
     filter_1d = flatten_matrix(filter_2d)
 
-    average_2d = average_ms(lambda: calculate_mac(pattern_2d, filter_2d), repeat)
-    average_1d = average_ms(lambda: calculate_mac_flat(pattern_1d, filter_1d), repeat)
+    average_2d = average_mac_ms(pattern_2d, filter_2d, repeat)
+    average_1d = average_mac_flat_ms(pattern_1d, filter_1d, repeat)
 
     if average_2d == 0:
         improvement = 0.0

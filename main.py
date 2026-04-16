@@ -1,13 +1,10 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
 from core import (
     EPSILON,
     REPEAT_COUNT,
-    Matrix,
-    average_ms,
+    average_two_filter_ms,
     benchmark_mac,
     calculate_mac,
     format_score,
@@ -15,19 +12,19 @@ from core import (
     generate_pattern,
     generate_x_pattern,
 )
-from data_mode import AnalysisResult, analyze_pattern_case, load_filters, load_json_payload, pattern_sort_key
+from data_mode import analyze_pattern_case, load_filters, load_json_payload, pattern_sort_key
 
 DATA_FILE = Path(__file__).with_name("data.json")
 
 
-def print_matrix(title: str, matrix: Matrix) -> None:
+def print_matrix(title, matrix):
     """2차원 배열을 사람이 읽기 쉬운 표 모양으로 출력한다."""
     print(title)
     for row in matrix:
         print(" ".join(str(int(value)) if value.is_integer() else str(value) for value in row))
 
 
-def read_numeric_row(size: int, row_number: int) -> list[float]:
+def read_numeric_row(size, row_number):
     """콘솔에서 숫자 한 줄을 입력받아 float 리스트로 바꾼다.
 
     사용자가 숫자가 아닌 값을 넣거나, 필요한 개수보다 적거나 많이 입력하면
@@ -39,24 +36,24 @@ def read_numeric_row(size: int, row_number: int) -> list[float]:
     if len(values) != size:
         raise ValueError(f"입력 형식 오류: 각 줄에 {size}개의 숫자를 공백으로 구분해 입력하세요.")
 
-    row: list[float] = []
+    row = []
     for value in values:
         try:
             row.append(float(value))
-        except ValueError as error:
-            raise ValueError(f"입력 형식 오류: 각 줄에 {size}개의 숫자를 공백으로 구분해 입력하세요.") from error
+        except ValueError:
+            raise ValueError(f"입력 형식 오류: 각 줄에 {size}개의 숫자를 공백으로 구분해 입력하세요.")
 
     return row
 
 
-def read_matrix_from_console(title: str, size: int) -> Matrix:
+def read_matrix_from_console(title, size):
     """사용자에게 size줄을 입력받아 size x size 행렬을 만든다.
 
     한 줄 입력이 잘못되면 프로그램을 종료하지 않고 오류 메시지를 보여 준 뒤
     같은 줄을 다시 입력받는다.
     """
     print(title)
-    matrix: Matrix = []
+    matrix = []
 
     while len(matrix) < size:
         try:
@@ -67,7 +64,7 @@ def read_matrix_from_console(title: str, size: int) -> Matrix:
     return matrix
 
 
-def choose_from_menu(title: str, options: dict[str, str]) -> str:
+def choose_from_menu(title, options):
     """메뉴를 출력하고 사용자가 올바른 번호를 고를 때까지 반복한다."""
     while True:
         print(title)
@@ -80,7 +77,7 @@ def choose_from_menu(title: str, options: dict[str, str]) -> str:
         print()
 
 
-def choose_generated_label() -> str:
+def choose_generated_label():
     """자동 생성 예제에서 만들 패턴이 Cross인지 X인지 선택받는다."""
     choice = choose_from_menu(
         "[자동 생성 패턴 선택]",
@@ -92,7 +89,7 @@ def choose_generated_label() -> str:
     return "Cross" if choice == "1" else "X"
 
 
-def get_user_mode_matrices() -> tuple[Matrix, Matrix, Matrix]:
+def get_user_mode_matrices():
     """사용자 입력 모드에서 필터 A, 필터 B, 패턴을 준비한다.
 
     직접 입력을 고르면 콘솔에서 3x3 행렬을 받는다.
@@ -141,7 +138,7 @@ def get_user_mode_matrices() -> tuple[Matrix, Matrix, Matrix]:
     return filter_a, filter_b, pattern
 
 
-def print_performance_table(sizes: list[int], section_number: int) -> None:
+def print_performance_table(sizes, section_number):
     """여러 크기에 대해 MAC 평균 실행 시간과 연산 횟수를 표로 출력한다.
 
     2D 방식과 1D 방식의 시간을 함께 보여 주어 보너스 최적화 효과도 확인할 수 있다.
@@ -161,7 +158,7 @@ def print_performance_table(sizes: list[int], section_number: int) -> None:
     print()
 
 
-def print_user_mode_result(score_a: float, score_b: float, average_ms_value: float) -> None:
+def print_user_mode_result(score_a, score_b, average_ms_value):
     """사용자 입력 모드의 MAC 점수, 평균 시간, 최종 판정을 출력한다."""
     print()
     print("#---------------------------------------")
@@ -181,7 +178,7 @@ def print_user_mode_result(score_a: float, score_b: float, average_ms_value: flo
     print()
 
 
-def run_user_input_mode() -> None:
+def run_user_input_mode():
     """사용자 입력 모드 전체 흐름을 실행한다.
 
     필터와 패턴을 준비하고, 두 필터의 MAC 점수를 계산한 뒤,
@@ -192,33 +189,33 @@ def run_user_input_mode() -> None:
 
     score_a = calculate_mac(pattern, filter_a)
     score_b = calculate_mac(pattern, filter_b)
-    average_time = average_ms(lambda: (calculate_mac(pattern, filter_a), calculate_mac(pattern, filter_b)))
+    average_time = average_two_filter_ms(pattern, filter_a, filter_b)
 
     print_user_mode_result(score_a, score_b, average_time)
     print_performance_table([3], section_number=5)
 
 
-def print_case_result(result: AnalysisResult) -> None:
+def print_case_result(result):
     """data.json 패턴 한 건의 분석 결과를 콘솔에 출력한다."""
-    expected_label = result.expected if result.expected is not None else "N/A"
-    outcome = "PASS" if result.passed else "FAIL"
+    expected_label = result["expected"] if result["expected"] is not None else "N/A"
+    outcome = "PASS" if result["passed"] else "FAIL"
 
-    print(f"--- {result.case_id} ---")
-    print(f"Cross 점수: {format_score(result.score_cross)}")
-    print(f"X 점수: {format_score(result.score_x)}")
+    print(f"--- {result['case_id']} ---")
+    print(f"Cross 점수: {format_score(result['score_cross'])}")
+    print(f"X 점수: {format_score(result['score_x'])}")
 
-    if result.reason:
-        print(f"판정: {result.prediction} | expected: {expected_label} | {outcome} ({result.reason})")
+    if result["reason"]:
+        print(f"판정: {result['prediction']} | expected: {expected_label} | {outcome} ({result['reason']})")
     else:
-        print(f"판정: {result.prediction} | expected: {expected_label} | {outcome}")
+        print(f"판정: {result['prediction']} | expected: {expected_label} | {outcome}")
     print()
 
 
-def print_summary(results: list[AnalysisResult]) -> None:
+def print_summary(results):
     """data.json 분석 전체 결과의 총 테스트, 통과, 실패 수를 요약한다."""
     total_count = len(results)
-    passed_count = sum(1 for result in results if result.passed)
-    failed_results = [result for result in results if not result.passed]
+    passed_count = sum(1 for result in results if result["passed"])
+    failed_results = [result for result in results if not result["passed"]]
 
     print("#---------------------------------------")
     print("# [4] 결과 요약")
@@ -231,10 +228,10 @@ def print_summary(results: list[AnalysisResult]) -> None:
         print()
         print("실패 케이스:")
         for result in failed_results:
-            print(f"- {result.case_id}: {result.reason}")
+            print(f"- {result['case_id']}: {result['reason']}")
 
 
-def run_json_mode() -> None:
+def run_json_mode():
     """data.json 분석 모드 전체 흐름을 실행한다.
 
     파일 로드, 필터 검증, 패턴별 MAC 판정, 성능 분석, 결과 요약을 순서대로 진행한다.
@@ -271,7 +268,7 @@ def run_json_mode() -> None:
     print("# [2] 패턴 분석 (라벨 정규화 적용)")
     print("#---------------------------------------")
 
-    results: list[AnalysisResult] = []
+    results = []
     for case_id in sorted(raw_patterns.keys(), key=pattern_sort_key):
         result = analyze_pattern_case(case_id, raw_patterns[case_id], filters_by_size)
         results.append(result)
@@ -281,7 +278,7 @@ def run_json_mode() -> None:
     print_summary(results)
 
 
-def choose_mode() -> str:
+def choose_mode():
     """프로그램 시작 시 사용자 입력 모드와 data.json 분석 모드 중 하나를 선택받는다."""
     return choose_from_menu(
         "[모드 선택]",
@@ -292,7 +289,7 @@ def choose_mode() -> str:
     )
 
 
-def main() -> None:
+def main():
     """Mini NPU Simulator의 시작점이다."""
     print("=== Mini NPU Simulator ===")
     selected_mode = choose_mode()

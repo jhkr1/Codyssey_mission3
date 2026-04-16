@@ -134,7 +134,7 @@ NPU: AI 신경망의 MAC/행렬/텐서 연산에 특화된 전용 장치
 ### 6-1. 2차원 배열
 
 패턴과 필터는 모두 `n x n` 형태의 2차원 배열이다.  
-Python에서는 보통 `list[list[float]]` 형태로 다룬다.
+이 프로젝트에서는 초급자도 따라가기 쉽도록 일반적인 `list` 안에 `list`를 넣는 방식으로 다룬다.
 
 예:
 
@@ -492,6 +492,17 @@ README.md     : 실행 방법 + 이론 설명 + 결과 리포트
 
 ## 10. 실행 방법
 
+### 10-0. 개발 환경
+
+이 프로젝트는 아래 환경을 기준으로 작성했다.
+
+1. Python 3.8 이상
+2. 외부 라이브러리 사용 없음
+3. 표준 라이브러리만 사용: `json`, `time`, `re`, `pathlib`
+
+따라서 NumPy, pandas 같은 패키지를 따로 설치할 필요가 없다.  
+MAC 연산도 벡터화 라이브러리 없이 Python 반복문으로 직접 구현했다.
+
 ### 10-1. 프로그램 실행
 
 ```bash
@@ -700,13 +711,17 @@ T(N) = O(N^2)
 3. `generate_pattern(label, size)`
 4. `calculate_mac(pattern, matrix_filter)`
 5. `calculate_mac_flat(pattern, matrix_filter)`
-6. `benchmark_mac(size, repeat)`
+6. `average_mac_ms(pattern, matrix_filter, repeat)`
+7. `average_two_filter_ms(pattern, filter_a, filter_b, repeat)`
+8. `benchmark_mac(size, repeat)`
 
 `data_mode.py`
 
 1. `load_json_payload(data_file)`
 2. `load_filters(payload)`
-3. `analyze_pattern_case(case_id, case_payload, filters_by_size)`
+3. `extract_size_from_key(case_id)`
+4. `analyze_pattern_case(case_id, case_payload, filters_by_size)`
+5. `make_result(...)`
 
 `main.py`
 
@@ -724,18 +739,26 @@ main()
  └─ choose_mode()
     ├─ 1번 선택
     │  └─ run_user_input_mode()
-    │     ├─ 직접 입력 또는 자동 생성 선택
-    │     ├─ 필터/패턴 준비
+    │     ├─ get_user_mode_matrices()
+    │     │  ├─ 직접 입력: read_matrix_from_console()
+    │     │  └─ 자동 생성: generate_cross_pattern(), generate_x_pattern()
     │     ├─ calculate_mac()로 A/B 점수 계산
-    │     ├─ 판정 출력
-    │     └─ benchmark_mac()으로 2D vs 1D 성능 비교
+    │     ├─ average_two_filter_ms()로 평균 시간 측정
+    │     ├─ print_user_mode_result()로 판정 출력
+    │     └─ print_performance_table([3])로 3x3 성능 출력
     └─ 2번 선택
        └─ run_json_mode()
           ├─ load_json_payload()
           ├─ load_filters()
-          ├─ analyze_pattern_case() 반복 실행
-          ├─ PASS/FAIL 출력
-          ├─ benchmark_mac()으로 성능 비교
+          ├─ patterns를 key 순서로 반복
+          │  └─ analyze_pattern_case()
+          │     ├─ extract_size_from_key()로 N 추출
+          │     ├─ size_N 필터 선택
+          │     ├─ validate_matrix()로 패턴 크기 검증
+          │     ├─ 크기 불일치: make_result(..., FAIL 사유)
+          │     └─ 정상 케이스: calculate_two_scores(), decide_label()
+          ├─ print_case_result()로 케이스별 PASS/FAIL 출력
+          ├─ print_performance_table([3, 5, 13, 25])로 성능 비교
           └─ 결과 요약 출력
 ```
 
@@ -782,7 +805,7 @@ main()
 실패를 하나의 원인으로만 보면 디버깅이 오래 걸린다.  
 이번 과제에서는 실패 원인을 최소 4가지 관점으로 분리해서 보는 것이 좋다.
 
-### 16-1. 데이터 문제
+### 18-1. 데이터 문제
 
 예:
 
@@ -790,7 +813,7 @@ main()
 2. 숫자 대신 문자열이 섞여 있음
 3. 2차원 배열이 아니라 1차원 배열이 들어옴
 
-### 16-2. 스키마 문제
+### 18-2. 스키마 문제
 
 예:
 
@@ -798,7 +821,7 @@ main()
 2. `size_25` 필터가 누락됨
 3. 필터 키가 `size25`처럼 형식을 어김
 
-### 16-3. 로직 문제
+### 18-3. 로직 문제
 
 예:
 
@@ -806,7 +829,7 @@ main()
 2. 누적합 초기화 위치가 잘못됨
 3. 더 큰 점수를 선택하는 비교문이 뒤집힘
 
-### 16-4. 수치 비교 문제
+### 18-4. 수치 비교 문제
 
 예:
 
@@ -818,9 +841,11 @@ main()
 
 ## 19. 결과 리포트
 
-이번 저장소에 포함된 기본 `data.json`은 의도적으로 모두 정상 케이스로 구성했다.  
-즉, 기본 실행에서는 `0 FAIL`이 나오도록 설계했다.  
-그 이유는 현재 구현이 다음 두 문제를 미리 막고 있기 때문이다.
+이번 저장소에 포함된 기본 `data.json`에는 정상 케이스와 의도적 실패 케이스가 함께 들어 있다.  
+특히 `size_5_3`은 키 이름 때문에 5x5 필터를 선택하지만, 실제 `input`은 3x3 배열이다.  
+이 케이스는 "필터와 패턴의 크기가 일치하지 않으면 프로그램이 중단되지 않고 케이스 단위 FAIL로 처리해야 한다"는 요구사항을 검증하기 위해 넣었다.
+
+현재 구현은 다음 정책으로 정상 케이스와 실패 케이스를 구분한다.
 
 1. 라벨 정규화로 `+`, `cross`, `x` 표기를 내부 표준 라벨 `Cross`, `X`로 통일했다.
 2. 점수 비교에서 `epsilon = 1e-9` 정책을 사용해 부동소수점 미세 오차를 동점으로 안전하게 처리했다.
@@ -829,29 +854,32 @@ main()
 5. 필터 키는 `size_N` 정규식으로 검증한다.
 6. JSON 구조가 잘못되어도 프로그램이 바로 종료되지 않고, 가능한 범위에서 원인을 메시지로 드러낸다.
 7. 케이스 단위 분석 함수 `analyze_pattern_case()`는 예외를 세분화해서 `ERROR`와 사유를 리포트한다.
-8. 따라서 기본 제공 데이터셋에서는 PASS/FAIL 비교가 안정적으로 수행된다.
-9. 만약 실제 과제용 데이터에서 FAIL이 생긴다면, 우선 라벨 규칙과 크기 불일치를 먼저 의심하는 것이 효율적이다.
-10. 그 다음으로 실수 비교 정책과 동점 처리 규칙이 과제 기준과 일치하는지 확인하면 된다.
-11. 마지막으로 MAC 구현 자체가 위치별 곱셈과 전체 누적합을 정확히 수행하는지 점검하면 된다.
+8. 따라서 정상 케이스에서는 PASS/FAIL 비교가 안정적으로 수행된다.
+9. `size_5_3`처럼 크기가 맞지 않는 케이스는 MAC 계산을 시도하지 않고 `ERROR` 판정과 실패 사유를 출력한다.
+10. 이때 프로그램 전체는 종료되지 않고, 다음 케이스 분석과 성능 분석, 결과 요약까지 계속 진행된다.
+11. 만약 실제 과제용 데이터에서 다른 FAIL이 생긴다면, 우선 라벨 규칙과 크기 불일치를 먼저 의심하는 것이 효율적이다.
+12. 그 다음으로 실수 비교 정책과 동점 처리 규칙이 과제 기준과 일치하는지 확인하면 된다.
+13. 마지막으로 MAC 구현 자체가 위치별 곱셈과 전체 누적합을 정확히 수행하는지 점검하면 된다.
 
 ### 19-1. 기본 데이터셋 실행 결과 예시
 
 현재 포함된 `data.json` 기준으로 한 번 실행했을 때의 요약은 아래와 같았다.
 
 ```text
-총 테스트: 4개
+총 테스트: 5개
 통과: 4개
-실패: 0개
+실패: 1개
 ```
 
-각 케이스는 모두 예상 라벨과 같은 판정을 얻었다.
+정상 케이스는 예상 라벨과 같은 판정을 얻고, 의도적 오류 케이스는 크기 불일치 때문에 FAIL이 된다.
 
 1. `size_5_1` -> Cross
 2. `size_5_2` -> X
-3. `size_13_1` -> Cross
-4. `size_25_1` -> X
+3. `size_5_3` -> FAIL (`size_5_3.input`의 행 수가 5가 아님)
+4. `size_13_1` -> Cross
+5. `size_25_1` -> X
 
-이 결과는 "현재 기본 데이터셋에서는 정규화와 비교 정책이 안정적으로 적용된다"는 점을 보여 준다.
+이 결과는 "정상 데이터는 안정적으로 PASS 처리되고, 크기 불일치 데이터는 프로그램을 멈추지 않고 FAIL 처리된다"는 점을 보여 준다.
 
 ## 20. 성능 분석 해설
 
@@ -968,425 +996,160 @@ main()
 
 ## 23. 이 프로젝트로 함께 익히는 Python 문법 정리
 
-이번 과제는 알고리즘만 배우는 문제가 아니라, Python 문법을 꽤 넓게 경험하는 문제이기도 하다.  
-특히 `main.py`에는 초급 문법을 넘어서는 요소들이 여러 개 들어 있다.  
-아래는 이번 프로젝트를 이해하면서 함께 익히면 좋은 문법 정리다.
+이번 코드는 과제의 핵심인 `2차원 배열`, `MAC 연산`, `JSON 검증`, `PASS/FAIL 리포트`가 잘 보이도록 일부러 고급 문법을 줄였다.  
+타입 힌트, 데이터 클래스, 람다식 같은 문법을 쓰면 코드를 더 짧게 만들 수도 있지만, 이번 미션에서는 평가자가 그런 문법보다 알고리즘과 데이터 처리 흐름을 보도록 하는 것이 더 중요하다.
 
-### 23-1. 함수 정의와 타입 힌트
+### 23-1. 함수로 역할 나누기
 
-예를 들어 아래 함수 선언을 보자.
+코드는 기능별로 작은 함수로 나누었다.
 
 ```python
-def read_matrix_from_console(title: str, size: int) -> Matrix:
+def calculate_mac(pattern, matrix_filter):
 ```
 
-이 문장은 다음 뜻을 가진다.
+이 함수는 이름 그대로 MAC 점수만 계산한다.  
+입력 처리, JSON 분석, 결과 출력은 다른 함수가 담당한다.
 
-1. 함수 이름은 `read_matrix_from_console`
-2. `title` 매개변수는 `str` 타입으로 기대한다
-3. `size` 매개변수는 `int` 타입으로 기대한다
-4. 함수의 반환값은 `Matrix` 타입으로 기대한다
+이렇게 나누면 발표할 때도 설명이 쉬워진다.
 
-여기서 `title: str`, `size: int`, `-> Matrix`는 모두 `타입 힌트(type hint)`다.  
-타입 힌트는 Python이 강제로 막는 문법은 아니지만, 코드를 읽는 사람과 IDE, 정적 분석 도구에게 매우 큰 도움을 준다.
+1. 입력은 어디서 받는가
+2. 검증은 어디서 하는가
+3. 점수 계산은 어디서 하는가
+4. 결과 출력은 어디서 하는가
 
-예:
+### 23-2. 리스트로 2차원 배열 만들기
+
+행렬은 리스트 안에 리스트를 넣어서 표현한다.
 
 ```python
-def calculate_mac(pattern: Matrix, matrix_filter: Matrix) -> float:
+matrix = []
+row = [0.0, 1.0, 0.0]
+matrix.append(row)
 ```
 
-이 선언을 보면, 이 함수는 두 개의 행렬을 받아서 `float` 점수를 돌려준다는 사실을 한 줄로 이해할 수 있다.
-
-### 23-2. 타입 별칭(Type Alias)
-
-`main.py`에는 이런 코드가 있다.
+3x3 패턴은 최종적으로 이런 모양이 된다.
 
 ```python
-Matrix = list[list[float]]
-```
-
-이것은 `Matrix`라는 이름을 `list[list[float]]`의 별칭으로 쓰겠다는 뜻이다.
-
-즉:
-
-1. 행렬 자료형을 짧게 부를 수 있다.
-2. 함수 선언이 더 읽기 쉬워진다.
-3. "이 값은 단순 리스트가 아니라 행렬이다"라는 의도를 드러낼 수 있다.
-
-타입 별칭은 복잡한 자료구조를 다룰 때 특히 유용하다.
-
-### 23-3. `|` 문법으로 Union 타입 표현하기
-
-아래 같은 코드도 나온다.
-
-```python
-def normalize_label(raw_label: object) -> str | None:
-```
-
-이 의미는 반환값이 `str`일 수도 있고 `None`일 수도 있다는 뜻이다.  
-예전 Python에서는 보통 `Optional[str]` 또는 `Union[str, None]`이라고 썼다.  
-Python 3.10 이상에서는 `str | None`처럼 더 간결하게 쓸 수 있다.
-
-예:
-
-1. 정규화 성공 시 `Cross` 또는 `X` 반환
-2. 정규화 실패 시 `None` 반환
-
-이 문법은 "이 값이 항상 존재하지 않을 수도 있다"는 사실을 코드에 명시해 준다.
-
-### 23-4. `from __future__ import annotations`
-
-파일 맨 위에는 이런 문장이 있다.
-
-```python
-from __future__ import annotations
-```
-
-이 문장은 타입 힌트 평가 방식을 더 유연하게 만들어 준다.  
-특히 복잡한 타입 힌트나 아직 완전히 정의되지 않은 타입을 다룰 때 도움이 된다.  
-이번 프로젝트에서는 타입 힌트를 자연스럽게 쓰기 위한 안전장치처럼 이해해도 충분하다.
-
-즉, "타입 힌트를 더 편하게 쓰기 위한 준비 문장" 정도로 기억해 두면 좋다.
-
-### 23-5. `@dataclass`
-
-다음 코드를 보자.
-
-```python
-@dataclass
-class AnalysisResult:
-    case_id: str
-    expected: str | None
-    prediction: str
-    score_cross: float | None
-    score_x: float | None
-    passed: bool
-    reason: str = ""
-```
-
-`@dataclass`는 "데이터를 담는 클래스"를 간단히 만들 수 있게 해 주는 장식자다.
-
-일반 클래스로 쓰면 보통 아래를 직접 적어야 한다.
-
-1. `__init__`
-2. `__repr__`
-3. 경우에 따라 비교 메서드
-
-하지만 `@dataclass`를 쓰면 이런 기본 기능을 자동으로 만들어 준다.  
-이번 프로젝트에서는 분석 결과 한 건을 구조적으로 담는 용도로 아주 잘 맞는다.
-
-### 23-6. 리스트 컴프리헨션
-
-이번 리팩토링 이후 패턴 생성기는 반복문 버전으로 바꿨다.  
-처음 학습할 때는 컴프리헨션보다 반복문이 더 따라가기 쉬울 수 있다.  
-그래도 Python에서 자주 나오기 때문에 컴프리헨션 문법 자체는 알아둘 가치가 있다.
-
-예를 들어 아래 같은 형태가 대표적이다.
-
-```python
-return [
-    [1.0 if row == middle or col == middle else 0.0 for col in range(size)]
-    for row in range(size)
+[
+    [0.0, 1.0, 0.0],
+    [1.0, 1.0, 1.0],
+    [0.0, 1.0, 0.0],
 ]
 ```
 
-이것은 `리스트 컴프리헨션(list comprehension)`이다.  
-반복문으로 리스트를 만드는 문법을 한 줄 구조로 압축한 것이다.
+이번 코드에서는 `matrix: Matrix = []` 같은 타입 힌트 문법을 쓰지 않고, 단순히 `matrix = []`로 시작한다.  
+그래서 "리스트에 행을 하나씩 추가한다"는 흐름이 더 직접적으로 보인다.
 
-일반 반복문 버전으로 풀면 대략 이런 느낌이다.
+### 23-3. 반복문으로 직접 계산하기
+
+MAC 연산은 외부 라이브러리 없이 반복문으로 직접 구현했다.
 
 ```python
-result = []
+total = 0.0
+
 for row in range(size):
-    current_row = []
     for col in range(size):
-        if row == middle or col == middle:
-            current_row.append(1.0)
-        else:
-            current_row.append(0.0)
-    result.append(current_row)
+        total += pattern[row][col] * matrix_filter[row][col]
 ```
 
-즉, 컴프리헨션은 짧고 강력하지만 처음 보면 읽기 어려울 수 있다.  
-한 번에 이해가 안 되면 반복문 형태로 풀어서 해석하면 된다.
+이 부분이 이번 과제의 핵심이다.  
+같은 위치에 있는 숫자끼리 곱하고, 그 결과를 `total`에 계속 더한다.
 
-### 23-7. 삼항 조건식
+### 23-4. 조건문으로 판정하기
 
-컴프리헨션 안에 들어 있는 이 부분도 중요하다.
+두 점수 차이가 아주 작으면 동점으로 처리한다.
 
 ```python
-1.0 if row == middle or col == middle else 0.0
+if abs(score_cross - score_x) < EPSILON:
+    return "UNDECIDED"
+if score_cross > score_x:
+    return "Cross"
+return "X"
 ```
 
-이 문법은 `삼항 조건식`이다.
+복잡한 문법보다 중요한 것은 판정 기준이 분명하다는 점이다.
 
-형태:
+1. 거의 같으면 `UNDECIDED`
+2. Cross 점수가 높으면 `Cross`
+3. X 점수가 높으면 `X`
 
-```python
-참일때값 if 조건 else 거짓일때값
-```
+### 23-5. try/except로 안전하게 실패 처리하기
 
-즉:
-
-1. 조건이 참이면 `1.0`
-2. 조건이 거짓이면 `0.0`
-
-짧은 조건 분기에서 자주 사용된다.
-
-### 23-8. 키워드 전용 인자 `*`
-
-아래 함수 선언은 초급 단계에서는 낯설 수 있다.  
-이번 리팩토링 버전의 메인 코드에서는 가독성을 위해 사용을 줄였지만, 실무 코드에서는 여전히 자주 본다.
-
-```python
-def some_function(data, *, expected_size=5, matrix_name="matrix"):
-```
-
-여기서 `*` 뒤에 오는 인자들은 `키워드 전용 인자(keyword-only argument)`가 된다.  
-즉, 호출할 때 반드시 이름을 써야 한다.
-
-예:
-
-```python
-some_function(data, expected_size=5, matrix_name="size_5.cross")
-```
-
-이렇게 하면 인자의 의미가 더 분명해지고, 순서를 헷갈리는 실수를 줄일 수 있다.
-
-### 23-9. 기본값 매개변수
-
-함수 선언에서 아래처럼 값을 미리 넣어 둘 수 있다.
-
-```python
-def decide_label(score_cross: float, score_x: float, epsilon: float = EPSILON) -> str:
-```
-
-이 뜻은 `epsilon`을 따로 주지 않으면 기본값으로 `EPSILON`을 쓰겠다는 의미다.
-
-장점:
-
-1. 기본 정책을 중앙에서 관리할 수 있다.
-2. 필요하면 호출 시 다른 값으로 덮어쓸 수 있다.
-
-### 23-10. f-string
-
-이번 프로젝트에는 이런 문자열이 많이 나온다.
-
-```python
-return f"{value:.16f}"
-print(f"총 테스트: {total_count}개")
-```
-
-이것은 `f-string` 문법이다.  
-문자열 안에 변수를 자연스럽게 끼워 넣을 수 있다.
-
-특히 아래 문법은 자주 쓰인다.
-
-```python
-f"{value:.16f}"
-```
-
-이 의미는 `value`를 소수점 아래 16자리까지 고정 소수점 형태로 출력하겠다는 뜻이다.  
-부동소수점 오차를 눈으로 확인할 때 유용하다.
-
-### 23-11. 예외 처리 `try / except`
-
-예를 들어 입력 파싱 부분에는 이런 구조가 있다.
+사용자 입력이나 JSON 데이터는 항상 올바르다고 가정하면 안 된다.  
+그래서 숫자 변환이나 데이터 검증은 `try / except`로 감싼다.
 
 ```python
 try:
-    values.append(float(token))
-except ValueError as error:
-    raise ValueError("입력 형식 오류 ...") from error
+    row.append(float(value))
+except ValueError:
+    raise ValueError("입력 형식 오류 ...")
 ```
 
-이 문법의 흐름은 이렇다.
+JSON 모드에서도 케이스 하나가 잘못되었다고 전체 프로그램이 멈추지 않는다.  
+잘못된 케이스만 `FAIL`로 기록하고 다음 케이스를 계속 분석한다.
 
-1. 우선 `float(token)`을 시도한다.
-2. 실패하면 `ValueError`가 발생한다.
-3. 그 예외를 잡아서 더 친절한 메시지로 다시 던진다.
+### 23-6. 딕셔너리로 결과 묶기
 
-즉, 내부 오류를 사용자 친화적인 메시지로 바꾸는 패턴이다.
-
-### 23-12. 예외 체이닝 `raise ... from error`
-
-방금 코드의 `from error`도 꽤 중요한 고급 문법이다.
+`data_mode.py`는 패턴 한 건의 분석 결과를 딕셔너리로 묶는다.
 
 ```python
-raise ValueError("입력 형식 오류 ...") from error
+return {
+    "case_id": case_id,
+    "expected": expected,
+    "prediction": prediction,
+    "passed": passed,
+    "reason": reason,
+}
 ```
 
-이 문법은 "새 예외가 이전 예외에서 비롯되었다"는 관계를 보존한다.  
-디버깅할 때는 원래 예외와 새 예외의 연결 관계를 추적할 수 있어서 유용하다.
+이 방식은 초급자에게 익숙한 자료구조만 사용한다.  
+데이터 클래스 같은 문법을 쓰지 않아도, 케이스 번호와 판정 결과, 실패 이유를 한 덩어리로 다룰 수 있다.
 
-### 23-13. `isinstance`
+### 23-7. f-string으로 출력하기
 
-다음 같은 코드도 자주 나온다.
+결과 출력에는 f-string을 사용한다.
 
 ```python
-if not isinstance(raw_label, str):
-    return None
+print(f"총 테스트: {total_count}개")
+print(f"연산 시간: {average_time:.6f} ms")
 ```
 
-`isinstance(value, type)`는 값이 특정 타입인지 검사하는 문법이다.
+문자열 안에 변수 값을 넣기 쉽고, 소수점 자리수도 지정할 수 있어서 콘솔 리포트에 잘 맞는다.
 
-이번 프로젝트에서는 다음 검증에 쓰였다.
+### 23-8. pathlib로 data.json 찾기
 
-1. 문자열인지 확인
-2. 리스트인지 확인
-3. 숫자인지 확인
-4. `bool`은 숫자처럼 보이지만 별도로 배제
-
-즉, 데이터 검증의 핵심 도구다.
-
-### 23-14. `enumerate`
-
-코드에는 이런 형태가 있다.
-
-```python
-for row_index, raw_row in enumerate(raw_matrix, start=1):
-```
-
-`enumerate()`는 반복하면서 인덱스도 함께 꺼내는 함수다.  
-`start=1`을 주면 1부터 번호를 붙인다.
-
-이번 프로젝트에서는 에러 메시지를 더 자연스럽게 만들기 위해 사용했다.
-
-예:
-
-1. 1행
-2. 2행
-3. 3행
-
-이런 표시가 사용자에게 더 이해하기 쉽다.
-
-### 23-15. `lambda`
-
-성능 측정 함수 호출에서는 이런 문법이 나온다.
-
-```python
-average_ms_value = average_ms(lambda: calculate_mac(pattern, matrix_filter), repeat)
-```
-
-`lambda`는 이름 없는 짧은 함수를 만드는 문법이다.
-
-위 코드는 사실상 이런 의미다.
-
-```python
-def temp():
-    return calculate_mac(pattern, matrix_filter)
-```
-
-짧은 동작을 함수 인자로 넘길 때 유용하다.
-
-### 23-16. `Callable`
-
-이와 연결해서 다음 타입 힌트도 이해할 필요가 있다.
-
-```python
-def average_ms(operation: Callable[[], object], repeat: int = REPEAT_COUNT) -> float:
-```
-
-`Callable[[], object]`는 "인자를 받지 않고 어떤 값을 반환하는 호출 가능한 객체"라는 뜻이다.  
-즉, 함수도 인자로 넘길 수 있다는 사실을 타입 차원에서 표현한 것이다.
-
-### 23-17. `Path`와 파일 경로 처리
-
-다음 코드는 파일 경로를 다룬다.
+`main.py`는 아래 코드로 `data.json` 위치를 찾는다.
 
 ```python
 DATA_FILE = Path(__file__).with_name("data.json")
 ```
 
-이것은 `pathlib.Path` 문법이다.  
-문자열로 경로를 이어 붙이는 방식보다 더 안전하고 읽기 쉽다.
+이 코드는 `main.py`와 같은 폴더에 있는 `data.json`을 안정적으로 찾기 위한 코드다.  
+프로그램을 어느 위치에서 실행하더라도 데이터 파일 경로가 흔들리지 않는다.
 
-의미:
+### 23-9. 정규표현식으로 키 규칙 검사하기
 
-1. 현재 파일 경로를 잡는다
-2. 같은 폴더 안의 `data.json` 파일을 찾는다
-
-즉, 프로그램을 어디서 실행하든 `main.py` 옆의 `data.json`을 안정적으로 참조할 수 있다.
-
-### 23-18. 정규표현식 `re.fullmatch`
-
-아래 코드는 문자열 형식을 검사한다.
+`data.json`의 패턴 키는 `size_5_1`, `size_13_1` 같은 형식이어야 한다.
 
 ```python
-match = re.fullmatch(r"size_(\d+)_(\d+)", pattern_key)
+match = re.fullmatch(r"size_(\d+)_(\d+)", case_id)
 ```
 
-이 의미는 `pattern_key`가 정확히 `size_숫자_숫자` 형식인지 확인하겠다는 뜻이다.
+이 코드는 키에서 크기 `N`을 뽑아내기 위해 사용한다.  
+이번 과제 요구사항 중 "패턴 키에서 N을 추출해 해당 size_N 필터를 선택한다"는 부분과 직접 연결된다.
 
-예:
+### 23-10. 일부러 줄인 문법
 
-1. `size_5_1` -> 매칭됨
-2. `size_13_2` -> 매칭됨
-3. `size13_2` -> 매칭 안 됨
+이번 코드에서는 아래 문법을 일부러 사용하지 않았다.
 
-정규표현식은 문자열 규칙 검증에 매우 강력하다.
+1. 복잡한 타입 힌트
+2. `@dataclass`
+3. `lambda`
+4. 리스트 컴프리헨션 남용
+5. 예외 체이닝 `raise ... from error`
 
-### 23-19. 튜플 반환
-
-다음 함수는 값을 두 개 돌려준다.
-
-```python
-def benchmark_mac(size: int, repeat: int = REPEAT_COUNT) -> tuple[float, float, int, float]:
-```
-
-반환값은 다음 두 개다.
-
-1. 2차원 평균 시간
-2. 1차원 평균 시간
-3. 연산 횟수
-4. 개선율
-
-Python은 이런 식으로 여러 값을 `튜플(tuple)` 형태로 자연스럽게 반환할 수 있다.
-
-예:
-
-```python
-average_2d, average_1d, operations, improvement = benchmark_mac(5)
-```
-
-이 문법을 `언패킹(unpacking)`이라고도 부른다.
-
-### 23-20. `if __name__ == "__main__":`
-
-파일 맨 아래의 이 구문도 매우 중요하다.
-
-```python
-if __name__ == "__main__":
-    main()
-```
-
-이 뜻은 "이 파일을 직접 실행했을 때만 `main()`을 호출하라"는 것이다.
-
-장점:
-
-1. 스크립트로 직접 실행 가능하다
-2. 나중에 다른 파일에서 import해도 자동 실행되지 않는다
-
-즉, Python 프로그램의 진입점을 분리하는 표준 패턴이다.
-
-### 23-21. 이번 프로젝트에서 특히 익혀두면 좋은 문법 우선순위
-
-전부 한 번에 외울 필요는 없다.  
-우선 아래 순서로 익히면 훨씬 부담이 적다.
-
-1. 함수 선언과 타입 힌트
-2. 리스트 컴프리헨션
-3. f-string
-4. `try / except`
-5. `isinstance`
-6. `@dataclass`
-7. `Path`
-8. `lambda`
-9. 정규표현식
-10. 키워드 전용 인자와 Union 타입
-
-이 순서대로 보면 "읽기 쉬운 코드", "안전한 입력 처리", "조금 더 현대적인 Python 문법"이 자연스럽게 연결된다.
+이 문법들이 나쁜 것은 아니다.  
+다만 이번 과제에서는 코드가 조금 길어지더라도, 평가자가 "MAC 연산과 데이터 검증이 어떻게 동작하는가"에 집중할 수 있게 하는 편이 더 적절하다.
 
 ## 24. 확장 아이디어
 
